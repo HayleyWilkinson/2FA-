@@ -1,0 +1,153 @@
+prompt = require('prompt');
+
+var promptMobile = {
+  properties: {
+    phoneNumber: {
+      message: 'Enter your mobile number.',
+      required: true
+    }
+  }
+};
+
+var promptCode = {
+  properties: {
+    code: {
+      message: 'Enter your 2FA code.',
+      required: true,
+      hidden: false
+    }
+  }
+};
+
+
+
+const request = require('request');
+
+
+var api_key = 'API Key Here';   //Insert API Key
+var api_secret = 'API Secret Here';  //Insert API Secret
+var api_combo = api_key + ':' + api_secret;
+
+var base64code = Buffer.from(api_combo).toString('base64');
+var authorizationValue = 'Basic ' + base64code;
+
+
+function getDateTime(minusMinutes) {
+    var date = new Date();
+    var hour = date.getHours();
+    hour = (hour < 10 ? "0" : "") + hour;
+    var min  = date.getMinutes() - minusMinutes;
+    min = (min < 10 ? "0" : "") + min;
+    var sec  = date.getSeconds();
+    sec = (sec < 10 ? "0" : "") + sec;
+    var year = date.getFullYear();
+    var month = date.getMonth() + 1;
+    month = (month < 10 ? "0" : "") + month;
+    var day  = date.getDate();
+    day = (day < 10 ? "0" : "") + day;  
+    return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec;
+  }
+ 
+  
+
+
+function isMessageReturned(parsedBody) {
+    //console.log(parsedBody.pagination.total_count);
+    if (parsedBody.pagination.total_count>0) {
+        console.log("Verified.")
+  }
+    else {
+        console.log("Not verified.")
+    }
+}
+
+
+
+function callback(error, response, body) {
+    //if (!error && response.statusCode == 200) {
+        //    console.log('Status:', response.statusCode);
+        //    console.log('Headers:', JSON.stringify(response.headers));
+        //    console.log('Response:', body);
+            isMessageReturned(JSON.parse(body));
+    //}''
+  }
+  
+  function make2FA(length) {
+    var text = "";
+    var possible = "0123456789";
+  
+    for (var i = 0; i < length; i++)
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+  
+    return text;
+  }
+  
+var MFACode = make2FA(6);
+  
+
+var userEntered2FACode='';
+
+
+prompt.start();
+
+
+
+
+
+
+
+//Ask the user for their phone number:
+prompt.get(promptMobile, function(err, result) {
+    console.log('Number received');
+    console.log(' number: ' + result.phoneNumber);
+    phoneNumber = result.phoneNumber;
+    sendMessageContaining2FACode();
+});
+
+
+//Send the message containing the 2FACode:
+function sendMessageContaining2FACode(){
+const lib = require('messagemedia-messages-sdk');
+lib.Configuration.basicAuthUserName = "API Key Here";  //Insert API Key
+lib.Configuration.basicAuthPassword = "API Secret Here";  //Insert API Secret
+var controller = lib.MessagesController;
+let body = new lib.SendMessagesRequest();
+body.messages = [];
+body.messages[0] = new lib.Message();
+body.messages[0].content = MFACode;
+body.messages[0].destinationNumber = phoneNumber;
+body.messages[0].metadata = {"2FAcode":MFACode};
+controller.sendMessages(body, function(error, response, context) {
+  if (error) {
+    console.log(error);
+  } else {
+    //console.log(response);
+  }
+});
+get2FACodeFromUser();
+}
+
+
+//Get the 2FA Code from the user (=userEntered2FACode)
+function get2FACodeFromUser(){
+prompt.get(promptCode, function(err, result) {
+    console.log('Input received');
+    console.log(' code: ' + result.code);
+    userEntered2FACode=result.code;
+    var endSearchTime=getDateTime(0);
+    var beginSearchTime=getDateTime(10);
+    //Configure the HTTP request
+    const options ={
+        url: 'https://api.messagemedia.com/v1/reporting/sent_messages/detail?' +
+        'end_date=' + endSearchTime +
+        '&start_date=' + beginSearchTime + 
+        '&destination_address=' + phoneNumber.replace('+','%2B') + 
+        '&metadata_key=' + '2FAcode' + 
+        '&metadata_value=' + userEntered2FACode,
+        headers: {
+            'Authorization': authorizationValue
+            }
+        };
+    request(options, callback);  
+  });
+};
